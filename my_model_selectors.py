@@ -68,16 +68,23 @@ class SelectorBIC(ModelSelector):
     Bayesian information criteria: BIC = -2 * logL + p * logN
     """
 
+    def bic(self, model):
+        return -2 *  model.score(self.X, self.lengths) + model.n_components * math.log(len(self.X))
+
     def select(self):
         """ select the best model for self.this_word based on
         BIC score for n between self.min_n_components and self.max_n_components
-
         :return: GaussianHMM object
         """
+
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        try:
+            models = [ self.base_model(n) for n in range(self.min_n_components, self.max_n_components) ]
+            _, selected = min([ (self.bic(m), m) for m in models ])
+            return selected
+        except:
+            return self.base_model(self.n_constant)
 
 
 class SelectorDIC(ModelSelector):
@@ -89,11 +96,18 @@ class SelectorDIC(ModelSelector):
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
 
+    def dic(self, model):
+        return model.score(self.X, self.lengths) - np.mean([ model.score(X, lengths) for word, (X, lengths) in self.hwords.items() if word != self.this_word ])
+
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        try:
+            models = [ self.base_model(n) for n in range(self.min_n_components, self.max_n_components) ]
+            _, selected = max([ (self.dic(m), m) for m in models ])
+            return selected
+        except:
+            return self.base_model(self.n_constant)
 
 
 class SelectorCV(ModelSelector):
@@ -101,8 +115,20 @@ class SelectorCV(ModelSelector):
 
     '''
 
-    def select(self):
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
+    def cv_score(self, n_components):
+        scores = []
+        split_method = KFold(n_splits=2)
+        for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+            self.X, self.lengths = combine_sequences(cv_train_idx, self.sequences)
+            m = self.base_model(n_components)
+            X, lengths = combine_sequences(cv_test_idx, self.sequences)
+            scores.append(m.score(X, lengths))
+        return np.mean(scores)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+    def select(self):
+        try:
+            warnings.filterwarnings("ignore", category=DeprecationWarning)
+            _, best_n_components = min([ (self.cv_score(n), n) for n in range(self.min_n_components, self.max_n_components) ])
+            return self.base_model(best_n_components)
+        except:
+            return self.base_model(self.n_constant)
