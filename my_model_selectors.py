@@ -69,7 +69,7 @@ class SelectorBIC(ModelSelector):
     """
 
     def bic(self, model):
-        return -2 *  model.score(self.X, self.lengths) + model.n_components * math.log(len(self.X))
+        return -2 *  model.score(self.X, self.lengths) + model.n_features * math.log(len(self.X))
 
     def select(self):
         """ select the best model for self.this_word based on
